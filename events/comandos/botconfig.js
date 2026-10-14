@@ -210,6 +210,9 @@ module.exports = {
       return;
     }
 
+    // Interações do painel de melhorias são tratadas em melhorias.js
+    if (interaction.customId?.startsWith("melhoria_")) return;
+
     if (interaction.isButton()) {
       if (interaction.user.id !== owner) {
         return interaction.reply({
