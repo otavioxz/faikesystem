@@ -16,10 +16,6 @@ const path = require("node:path");
 
 const dbPath = path.join(__dirname, "../database/melhorias.json");
 
-// Tema preto e cinza
-const COR_PRETO = 0x111214;
-const COR_CINZA = 0x4e5058;
-
 const CATEGORIAS = {
   melhoria: { label: "Melhoria", emoji: "✨", desc: "Ideia nova ou aprimoramento de algo existente" },
   duvida: { label: "Dúvida", emoji: "❔", desc: "Como funciona algum comando ou sistema" },
@@ -97,7 +93,6 @@ function buildPainel(guild) {
     );
 
   return new ContainerBuilder()
-    .setAccentColor(COR_PRETO)
     .addSectionComponents(header)
     .addSeparatorComponents(separator(true))
     .addTextDisplayComponents(text(`### Categorias\n${categorias}`))
@@ -153,7 +148,6 @@ function resumo({ cat, prio }) {
 
 function buildEtapaCategoria() {
   return new ContainerBuilder()
-    .setAccentColor(COR_CINZA)
     .addTextDisplayComponents(
       stepHeader(1, "Categoria", "Sobre o que é a sua solicitação?")
     )
@@ -165,7 +159,6 @@ function buildEtapaCategoria() {
 
 function buildEtapaPrioridade(cat) {
   return new ContainerBuilder()
-    .setAccentColor(COR_CINZA)
     .addTextDisplayComponents(
       stepHeader(
         2,
@@ -185,7 +178,6 @@ function buildEtapaPrioridade(cat) {
 
 function buildEtapaFormulario(cat, prio) {
   return new ContainerBuilder()
-    .setAccentColor(COR_CINZA)
     .addTextDisplayComponents(
       stepHeader(3, "Formulário", resumo({ cat, prio }))
     )
@@ -208,7 +200,6 @@ function buildEtapaFormulario(cat, prio) {
 
 function buildConfirmacao(req) {
   return new ContainerBuilder()
-    .setAccentColor(COR_PRETO)
     .addTextDisplayComponents(
       text(
         `## Solicitação enviada\nProtocolo **${formatId(req.id)}** — **${req.titulo}**\nVocê receberá uma DM sempre que o status mudar.`
@@ -237,8 +228,8 @@ function buildHub(req) {
       new ThumbnailBuilder().setURL(req.guildIcon || req.userAvatar)
     );
 
+  // Containers sem accent color (sem a barra lateral colorida)
   const container = new ContainerBuilder()
-    .setAccentColor(COR_PRETO)
     .addSectionComponents(header)
     .addSeparatorComponents(separator())
     .addTextDisplayComponents(text(body))
@@ -277,7 +268,6 @@ function buildHub(req) {
 function buildNotificacao(req) {
   const s = STATUS[req.status];
   return new ContainerBuilder()
-    .setAccentColor(COR_CINZA)
     .addTextDisplayComponents(
       text(
         `-# ATUALIZAÇÃO DE SOLICITAÇÃO\n## ${s.emoji} ${s.label}\nSua solicitação **${formatId(req.id)} — ${req.titulo}**, enviada em **${req.guildName}**, teve o status atualizado.`
