@@ -17,7 +17,9 @@ const {
   readDb,
   writeDb,
   formatId,
+  getGuildConfig,
   podeSolicitar,
+  buildConfig,
   buildEtapaCategoria,
   buildEtapaPrioridade,
   buildEtapaFormulario,
@@ -46,8 +48,8 @@ module.exports = {
     if (!interaction.customId?.startsWith("melhoria_")) return;
     const [action, ...args] = interaction.customId.split(":");
 
-    // Ações da equipe no servidor hub
-    if (action === "melhoria_status") {
+    // Ações da equipe no servidor hub: botão abre o forms, o envio aplica o status
+    if (action === "melhoria_status" || action === "melhoria_statusmodal") {
       if (interaction.user.id !== ADMIN_ID) {
         return interaction.reply({
           content: "Apenas o desenvolvedor do bot pode alterar o status.",
@@ -63,7 +65,23 @@ module.exports = {
           flags: [MessageFlags.Ephemeral],
         });
       }
+
+      if (action === "melhoria_status") {
+        const modal = new ModalBuilder()
+          .setCustomId(`melhoria_statusmodal:${id}:${status}`)
+          .setTitle(`${formatId(req.id)} → ${STATUS[status].label}`)
+          .addComponents(
+            input("mensagem", "Mensagem para o usuário (opcional)", TextInputStyle.Paragraph, {
+              max: 1000,
+              required: false,
+              placeholder: "Será enviada na DM junto com a atualização de status",
+            })
+          );
+        return interaction.showModal(modal);
+      }
+
       req.status = status;
+      req.resposta = interaction.fields.getTextInputValue("mensagem").trim();
       req.updatedBy = interaction.user.id;
       req.updatedAt = Date.now();
       writeDb(db);
@@ -74,15 +92,57 @@ module.exports = {
       });
 
       const user = await client.users.fetch(req.userId).catch(() => null);
-      if (user) {
-        user
-          .send({
-            flags: MessageFlags.IsComponentsV2,
-            components: [buildNotificacao(req)],
-          })
-          .catch(() => {});
-      }
+      const enviada = await user
+        ?.send({
+          flags: MessageFlags.IsComponentsV2,
+          components: [buildNotificacao(req)],
+        })
+        .catch(() => null);
+      if (enviada) return;
+
+      // DM fechada: tenta o canal de fallback do servidor de origem
+      const fallbackId = db.guilds[req.guildId]?.fallbackChannelId;
+      const fallback = fallbackId
+        ? await client.channels.fetch(fallbackId).catch(() => null)
+        : null;
+      const noFallback = await fallback
+        ?.send({
+          flags: MessageFlags.IsComponentsV2,
+          components: [buildNotificacao(req, { mencionar: true })],
+          allowedMentions: { users: [req.userId] },
+        })
+        .catch(() => null);
+
+      await interaction.followUp({
+        content: noFallback
+          ? `DM de <@${req.userId}> fechada. Atualização enviada no canal de fallback ${fallback}.`
+          : `Status atualizado, mas não consegui avisar <@${req.userId}>: DM fechada e ${fallbackId ? "sem acesso ao canal de fallback" : "nenhum canal de fallback configurado"} em **${req.guildName}**.`,
+        flags: [MessageFlags.Ephemeral],
+        allowedMentions: { parse: [] },
+      });
       return;
+    }
+
+    // Painel de configuração por servidor
+    if (action === "melhoria_cfg_fallback" || action === "melhoria_cfg_roles") {
+      if (interaction.user.id !== ADMIN_ID) {
+        return interaction.reply({
+          content: "Apenas o desenvolvedor do bot pode alterar a configuração.",
+          flags: [MessageFlags.Ephemeral],
+        });
+      }
+      const db = readDb();
+      const cfg = getGuildConfig(db, interaction.guildId);
+      if (action === "melhoria_cfg_fallback") {
+        cfg.fallbackChannelId = interaction.values[0] ?? null;
+      } else {
+        cfg.roles = interaction.values;
+      }
+      writeDb(db);
+      return interaction.update({
+        components: [buildConfig(interaction.guild)],
+        allowedMentions: { parse: [] },
+      });
     }
 
     if (!interaction.inGuild()) return;

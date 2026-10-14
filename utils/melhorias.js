@@ -2,7 +2,10 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ChannelSelectMenuBuilder,
+  ChannelType,
   ContainerBuilder,
+  RoleSelectMenuBuilder,
   SectionBuilder,
   SeparatorBuilder,
   SeparatorSpacingSize,
@@ -17,16 +20,16 @@ const path = require("node:path");
 const dbPath = path.join(__dirname, "../database/melhorias.json");
 
 const CATEGORIAS = {
-  melhoria: { label: "Melhoria", emoji: "✨", desc: "Ideia nova ou aprimoramento de algo existente" },
-  duvida: { label: "Dúvida", emoji: "❔", desc: "Como funciona algum comando ou sistema" },
-  correcao: { label: "Correção", emoji: "🛠️", desc: "Algo que não está funcionando como deveria" },
-  outros: { label: "Outros", emoji: "📁", desc: "Qualquer outro assunto" },
+  melhoria: { label: "Melhoria", emoji: "<:melhoria:1559752147128688670>", desc: "Ideia nova ou aprimoramento de algo existente" },
+  duvida: { label: "Dúvida", emoji: "<:duvida:1559752148634312714>", desc: "Como funciona algum comando ou sistema" },
+  correcao: { label: "Correção", emoji: "<:correcao:1559752144993910894>", desc: "Algo que não está funcionando como deveria" },
+  outros: { label: "Outros", emoji: "<:outros:1559752149800329257>", desc: "Qualquer outro assunto" },
 };
 
 const PRIORIDADES = {
-  baixa: { label: "Baixa", emoji: "⚪", desc: "Pode esperar" },
-  media: { label: "Média", emoji: "🔘", desc: "Faria diferença no dia a dia" },
-  alta: { label: "Alta", emoji: "⚫", desc: "Impacta bastante o servidor" },
+  baixa: { label: "Baixa", emoji: "<:low:1559753164742201444>", desc: "Pode esperar" },
+  media: { label: "Média", emoji: "<:medium:1559753166235504750>", desc: "Faria diferença no dia a dia" },
+  alta: { label: "Alta", emoji: "<:high:1559753167527350345>", desc: "Impacta bastante o servidor" },
 };
 
 const STATUS = {
@@ -56,6 +59,13 @@ function writeDb(db) {
 
 function formatId(id) {
   return `#${String(id).padStart(4, "0")}`;
+}
+
+function getGuildConfig(db, guildId) {
+  db.guilds[guildId] ??= {};
+  db.guilds[guildId].roles ??= [];
+  db.guilds[guildId].fallbackChannelId ??= null;
+  return db.guilds[guildId];
 }
 
 function podeSolicitar(member, guildId) {
@@ -243,6 +253,7 @@ function buildHub(req) {
     .addTextDisplayComponents(
       text(
         `**Status:** ${s.emoji} ${s.label}` +
+          (req.resposta ? `\n**Mensagem enviada:** ${req.resposta}` : "") +
           (req.updatedBy
             ? `\n-# Atualizado por <@${req.updatedBy}> <t:${Math.floor(req.updatedAt / 1000)}:R>`
             : "")
@@ -265,16 +276,79 @@ function buildHub(req) {
 }
 
 // DM pro solicitante quando o status muda
-function buildNotificacao(req) {
+// mencionar: usado no canal de fallback quando a DM do solicitante está fechada
+function buildNotificacao(req, { mencionar = false } = {}) {
   const s = STATUS[req.status];
+  const container = new ContainerBuilder().addTextDisplayComponents(
+    text(
+      `-# ATUALIZAÇÃO DE SOLICITAÇÃO\n## ${s.emoji} ${s.label}\n${mencionar ? `<@${req.userId}>, sua` : "Sua"} solicitação **${formatId(req.id)} — ${req.titulo}**, enviada em **${req.guildName}**, teve o status atualizado.`
+    )
+  );
+  if (req.resposta) {
+    container
+      .addSeparatorComponents(separator())
+      .addTextDisplayComponents(
+        text(`### Mensagem da equipe\n${req.resposta}`)
+      );
+  }
+  return container
+    .addSeparatorComponents(separator())
+    .addTextDisplayComponents(text("-# Central de Solicitações"));
+}
+
+// Painel de configuração por servidor (apenas ADMIN_ID)
+function buildConfig(guild) {
+  const cfg = getGuildConfig(readDb(), guild.id);
+  const canal = cfg.fallbackChannelId
+    ? `<#${cfg.fallbackChannelId}>`
+    : "`Não definido`";
+  const cargos = cfg.roles.length
+    ? cfg.roles.map((r) => `<@&${r}>`).join(" ")
+    : "`Nenhum` (apenas quem tem Gerenciar Servidor)";
+
+  const fallbackSelect = new ChannelSelectMenuBuilder()
+    .setCustomId("melhoria_cfg_fallback")
+    .setPlaceholder("Canal de fallback (DM fechada)")
+    .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+    .setMinValues(0)
+    .setMaxValues(1);
+  if (cfg.fallbackChannelId) {
+    fallbackSelect.setDefaultChannels(cfg.fallbackChannelId);
+  }
+
+  const rolesSelect = new RoleSelectMenuBuilder()
+    .setCustomId("melhoria_cfg_roles")
+    .setPlaceholder("Cargos que podem enviar solicitações")
+    .setMinValues(0)
+    .setMaxValues(25);
+  if (cfg.roles.length) rolesSelect.setDefaultRoles(...cfg.roles);
+
   return new ContainerBuilder()
     .addTextDisplayComponents(
       text(
-        `-# ATUALIZAÇÃO DE SOLICITAÇÃO\n## ${s.emoji} ${s.label}\nSua solicitação **${formatId(req.id)} — ${req.titulo}**, enviada em **${req.guildName}**, teve o status atualizado.`
+        `-# CONFIGURAÇÃO\n## Central de Solicitações\nServidor: **${guild.name}**`
       )
     )
+    .addSeparatorComponents(separator(true))
+    .addTextDisplayComponents(
+      text(
+        `### Canal de fallback\nSe a DM do solicitante estiver fechada, a atualização de status é enviada aqui marcando ele.\nAtual: ${canal}`
+      )
+    )
+    .addActionRowComponents(
+      new ActionRowBuilder().addComponents(fallbackSelect)
+    )
     .addSeparatorComponents(separator())
-    .addTextDisplayComponents(text("-# Central de Solicitações"));
+    .addTextDisplayComponents(
+      text(
+        `### Cargos permitidos\nAlém de quem tem **Gerenciar Servidor**, esses cargos podem enviar solicitações.\nAtuais: ${cargos}`
+      )
+    )
+    .addActionRowComponents(new ActionRowBuilder().addComponents(rolesSelect))
+    .addSeparatorComponents(separator())
+    .addTextDisplayComponents(
+      text("-# Desmarque tudo no seletor para limpar a configuração")
+    );
 }
 
 module.exports = {
@@ -287,7 +361,9 @@ module.exports = {
   readDb,
   writeDb,
   formatId,
+  getGuildConfig,
   podeSolicitar,
+  buildConfig,
   buildPainel,
   buildEtapaCategoria,
   buildEtapaPrioridade,
