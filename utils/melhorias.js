@@ -111,7 +111,7 @@ function buildPainel(guild) {
     .addSeparatorComponents(separator())
     .addTextDisplayComponents(
       text(
-        "### Como funciona\n`1` Escolha a categoria\n`2` Defina a prioridade\n`3` Preencha o formulário\n-# Você acompanha o status pela DM"
+        "### Como funciona\n- Escolha a categoria\n- Defina a prioridade\n- Preencha o formulário\n-# Você acompanha o status pela DM"
       )
     )
     .addSeparatorComponents(separator(true))
