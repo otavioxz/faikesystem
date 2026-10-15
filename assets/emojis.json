@@ -5,5 +5,13 @@
     "correcao": "<:correcao:1559752144993910894>",
     "prioridadebaixa": "<:low:1559753164742201444>",
     "prioridademedia": "<:medium:1559753166235504750>",
-    "prioridadealta": "<:high:1559753167527350345>"
+    "prioridadealta": "<:high:1559753167527350345>",
+    "enviar": "<:seta:1560424451567521923>",
+    "aprovado": "<:aprovado:1560428240013758647>",
+    "reprovado": "<:recusado:1560428244937744484>",
+    "foguete": "<a:foguete:1560428241917841499>",
+    "refazer": "<:refazer:1560428247383015444>",
+    "ampulheta": "<a:load:1560429798096904273>",
+    "preencher": "<:escrever:1560429913285206066>",
+    "lupa": "<:lupa:1560430223160377380>"
 }

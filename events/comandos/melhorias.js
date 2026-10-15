@@ -2,9 +2,11 @@ const {
   Events,
   MessageFlags,
   ModalBuilder,
+  LabelBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ActionRowBuilder,
+  FileUploadBuilder,
+  AttachmentBuilder,
 } = require("discord.js");
 const hubChannelId = process.env.HUB_CHANNEL_ID;
 const {
@@ -30,16 +32,55 @@ const {
 
 const V2_EPHEMERAL = [MessageFlags.Ephemeral, MessageFlags.IsComponentsV2];
 
-function input(id, label, style, { min, max, required = true, placeholder }) {
+// Limite de upload de bot sem boost: o que passar disso vai como link
+const LIMITE_UPLOAD = 10 * 1024 * 1024;
+const MAX_ANEXOS = 5;
+
+function input(id, label, style, { min, max, required = true, placeholder, description }) {
   const builder = new TextInputBuilder()
     .setCustomId(id)
-    .setLabel(label)
     .setStyle(style)
     .setRequired(required)
     .setMaxLength(max);
   if (min) builder.setMinLength(min);
   if (placeholder) builder.setPlaceholder(placeholder);
-  return new ActionRowBuilder().addComponents(builder);
+  const labelBuilder = new LabelBuilder()
+    .setLabel(label)
+    .setTextInputComponent(builder);
+  if (description) labelBuilder.setDescription(description);
+  return labelBuilder;
+}
+
+// Baixa os anexos do forms (URLs temporárias) para reenviar no hub
+async function baixarAnexos(uploads) {
+  const files = [];
+  const anexos = [];
+  const links = [];
+  let total = 0;
+
+  for (const [i, att] of [...uploads.values()].entries()) {
+    const nome = `${i + 1}-${att.name.replace(/[^\w.-]/g, "_")}`;
+    const midia = /^(image|video)\//.test(att.contentType || "");
+
+    if (total + att.size > LIMITE_UPLOAD) {
+      links.push({ nome: att.name, url: att.url });
+      continue;
+    }
+    try {
+      const res = await fetch(att.url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      files.push(
+        new AttachmentBuilder(Buffer.from(await res.arrayBuffer()), {
+          name: nome,
+        })
+      );
+      anexos.push({ nome, original: att.name, midia });
+      total += att.size;
+    } catch {
+      links.push({ nome: att.name, url: att.url });
+    }
+  }
+  return { files, anexos, links };
 }
 
 module.exports = {
@@ -70,11 +111,12 @@ module.exports = {
         const modal = new ModalBuilder()
           .setCustomId(`melhoria_statusmodal:${id}:${status}`)
           .setTitle(`${formatId(req.id)} → ${STATUS[status].label}`)
-          .addComponents(
-            input("mensagem", "Mensagem para o usuário (opcional)", TextInputStyle.Paragraph, {
+          .addLabelComponents(
+            input("mensagem", "Mensagem para o usuário", TextInputStyle.Paragraph, {
               max: 1000,
               required: false,
               placeholder: "Será enviada na DM junto com a atualização de status",
+              description: "Opcional",
             })
           );
         return interaction.showModal(modal);
@@ -193,7 +235,7 @@ module.exports = {
         const modal = new ModalBuilder()
           .setCustomId(`melhoria_modal:${cat}:${prio}`)
           .setTitle(`Solicitação — ${CATEGORIAS[cat].label}`)
-          .addComponents(
+          .addLabelComponents(
             input("titulo", "Título", TextInputStyle.Short, {
               min: 5,
               max: 80,
@@ -207,8 +249,19 @@ module.exports = {
             input("detalhes", "Informações adicionais", TextInputStyle.Paragraph, {
               max: 800,
               required: false,
-              placeholder: "Comando usado, exemplo, prints, links...",
-            })
+              placeholder: "Comando usado, exemplo, links...",
+              description: "Opcional",
+            }),
+            new LabelBuilder()
+              .setLabel("Anexos")
+              .setDescription(`Opcional · até ${MAX_ANEXOS} prints, vídeos ou arquivos`)
+              .setFileUploadComponent(
+                new FileUploadBuilder()
+                  .setCustomId("anexos")
+                  .setMinValues(0)
+                  .setMaxValues(MAX_ANEXOS)
+                  .setRequired(false)
+              )
           );
         return interaction.showModal(modal);
       }
@@ -233,8 +286,16 @@ module.exports = {
 
         await interaction.deferUpdate();
 
-        const db = readDb();
+        // Reserva o protocolo antes do download para não repetir ID
+        let db = readDb();
         const id = ++db.counter;
+        writeDb(db);
+
+        const uploads = interaction.fields.getUploadedFiles("anexos");
+        const { files, anexos, links } = uploads?.size
+          ? await baixarAnexos(uploads)
+          : { files: [], anexos: [], links: [] };
+
         const req = {
           id,
           categoria: cat,
@@ -242,6 +303,8 @@ module.exports = {
           titulo: interaction.fields.getTextInputValue("titulo").trim(),
           descricao: interaction.fields.getTextInputValue("descricao").trim(),
           detalhes: interaction.fields.getTextInputValue("detalhes").trim(),
+          anexos,
+          anexosLinks: links,
           status: "pendente",
           guildId: interaction.guildId,
           guildName: interaction.guild.name,
@@ -255,9 +318,11 @@ module.exports = {
         const msg = await hub.send({
           flags: MessageFlags.IsComponentsV2,
           components: [buildHub(req)],
+          files,
           allowedMentions: { parse: [] },
         });
         req.hubMessageId = msg.id;
+        db = readDb();
         db.requests[id] = req;
         writeDb(db);
 

@@ -5,6 +5,8 @@ const {
   ChannelSelectMenuBuilder,
   ChannelType,
   ContainerBuilder,
+  FileBuilder,
+  MediaGalleryBuilder,
   RoleSelectMenuBuilder,
   SectionBuilder,
   SeparatorBuilder,
@@ -33,11 +35,11 @@ const PRIORIDADES = {
 };
 
 const STATUS = {
-  pendente: { label: "Pendente", emoji: "⏳" },
-  analise: { label: "Em análise", emoji: "🔍" },
-  aprovada: { label: "Aprovada", emoji: "✅" },
-  recusada: { label: "Recusada", emoji: "❌" },
-  concluida: { label: "Concluída", emoji: "🚀" },
+  pendente: { label: "Pendente", emoji: "<a:load:1560429798096904273>" },
+  analise: { label: "Em análise", emoji: "<:lupa:1560430223160377380>" },
+  aprovada: { label: "Aprovada", emoji: "<:aprovado:1560428240013758647>" },
+  recusada: { label: "Recusada", emoji: "<:recusado:1560428244937744484>" },
+  concluida: { label: "Concluída", emoji: "<a:foguete:1560428241917841499>" },
 };
 
 // Único usuário que pode configurar o painel e alterar status no hub
@@ -87,7 +89,7 @@ function separator(large = false) {
 // Painel público enviado no servidor
 function buildPainel(guild) {
   const categorias = Object.values(CATEGORIAS)
-    .map((c) => `${c.emoji} **${c.label}** — ${c.desc}`)
+    .map((c) => `${c.emoji} **${c.label}**\n-# ${c.desc}`)
     .join("\n");
 
   const header = new SectionBuilder()
@@ -118,7 +120,7 @@ function buildPainel(guild) {
         new ButtonBuilder()
           .setCustomId("melhoria_abrir")
           .setLabel("Enviar solicitação")
-          .setEmoji("📨")
+          .setEmoji("<:seta:1560424451567521923>")
           .setStyle(ButtonStyle.Secondary)
       )
     )
@@ -197,12 +199,12 @@ function buildEtapaFormulario(cat, prio) {
         new ButtonBuilder()
           .setCustomId(`melhoria_form:${cat}:${prio}`)
           .setLabel("Preencher formulário")
-          .setEmoji("📝")
+          .setEmoji("<:escrever:1560429913285206066>")
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId("melhoria_reiniciar")
           .setLabel("Recomeçar")
-          .setEmoji("↩️")
+          .setEmoji("<:refazer:1560428247383015444>")
           .setStyle(ButtonStyle.Secondary)
       )
     );
@@ -212,7 +214,7 @@ function buildConfirmacao(req) {
   return new ContainerBuilder()
     .addTextDisplayComponents(
       text(
-        `## Solicitação enviada\nProtocolo **${formatId(req.id)}** — **${req.titulo}**\nVocê receberá uma DM sempre que o status mudar.`
+        `## Solicitação enviada\nProtocolo **${formatId(req.id)}** — **${req.titulo}**${req.anexos?.length || req.anexosLinks?.length ? `\nAnexos enviados: **${(req.anexos?.length || 0) + (req.anexosLinks?.length || 0)}**` : ""}\nVocê receberá uma DM sempre que o status mudar.`
       )
     )
     .addSeparatorComponents(separator())
@@ -242,7 +244,43 @@ function buildHub(req) {
   const container = new ContainerBuilder()
     .addSectionComponents(header)
     .addSeparatorComponents(separator())
-    .addTextDisplayComponents(text(body))
+    .addTextDisplayComponents(text(body));
+
+  // Anexos reenviados junto da mensagem (referenciados por attachment://)
+  const anexos = req.anexos || [];
+  const links = req.anexosLinks || [];
+  if (anexos.length || links.length) {
+    container
+      .addSeparatorComponents(separator())
+      .addTextDisplayComponents(
+        text(`### Anexos (${anexos.length + links.length})`)
+      );
+    const midias = anexos.filter((a) => a.midia);
+    if (midias.length) {
+      container.addMediaGalleryComponents(
+        new MediaGalleryBuilder().addItems(
+          midias.map((a) => (item) =>
+            item.setURL(`attachment://${a.nome}`).setDescription(a.original)
+          )
+        )
+      );
+    }
+    for (const a of anexos.filter((a) => !a.midia)) {
+      container.addFileComponents(
+        new FileBuilder().setURL(`attachment://${a.nome}`)
+      );
+    }
+    if (links.length) {
+      container.addTextDisplayComponents(
+        text(
+          links.map((l) => `[${l.nome}](${l.url})`).join("\n") +
+            "\n-# Grandes demais para reenviar; links temporários do Discord"
+        )
+      );
+    }
+  }
+
+  container
     .addSeparatorComponents(separator())
     .addTextDisplayComponents(
       text(
