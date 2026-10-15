@@ -26,6 +26,9 @@ const {
   buildEtapaPrioridade,
   buildEtapaFormulario,
   buildConfirmacao,
+  FILTROS,
+  buildLista,
+  buildDetalhe,
   buildHub,
   buildNotificacao,
 } = require("../../utils/melhorias");
@@ -209,6 +212,46 @@ module.exports = {
         return interaction.reply({
           flags: V2_EPHEMERAL,
           components: [buildEtapaCategoria()],
+        });
+      }
+
+      // Consulta: vindo do painel público abre uma resposta nova; dentro dela, navega
+      case "melhoria_lista": {
+        const [filtro, cat, page] = args;
+        if (!FILTROS[filtro] || (cat !== "todas" && !CATEGORIAS[cat])) return;
+        const payload = {
+          components: [buildLista(interaction.guild, filtro, cat, Number(page) || 0)],
+          allowedMentions: { parse: [] },
+        };
+        return interaction.message?.flags.has(MessageFlags.Ephemeral)
+          ? interaction.update(payload)
+          : interaction.reply({ ...payload, flags: V2_EPHEMERAL });
+      }
+
+      case "melhoria_lista_filtro":
+      case "melhoria_lista_cat": {
+        const filtro = action === "melhoria_lista_filtro" ? interaction.values[0] : args[0];
+        const cat = action === "melhoria_lista_cat" ? interaction.values[0] : args[0];
+        if (!FILTROS[filtro] || (cat !== "todas" && !CATEGORIAS[cat])) return;
+        return interaction.update({
+          components: [buildLista(interaction.guild, filtro, cat, 0)],
+          allowedMentions: { parse: [] },
+        });
+      }
+
+      case "melhoria_lista_ver": {
+        const [filtro, cat, page] = args;
+        const req = readDb().requests[interaction.values[0]];
+        // Nunca mostra solicitação de outro servidor
+        if (!req || req.guildId !== interaction.guildId) {
+          return interaction.update({
+            components: [buildLista(interaction.guild, filtro, cat, Number(page) || 0)],
+            allowedMentions: { parse: [] },
+          });
+        }
+        return interaction.update({
+          components: [buildDetalhe(req, `${filtro}:${cat}:${page}`)],
+          allowedMentions: { parse: [] },
         });
       }
 

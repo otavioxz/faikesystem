@@ -121,6 +121,11 @@ function buildPainel(guild) {
           .setCustomId("melhoria_abrir")
           .setLabel("Enviar solicitação")
           .setEmoji("<a:setinha:1560437915568578610>")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("melhoria_lista:abertas:todas:0")
+          .setLabel("Ver solicitações")
+          .setEmoji("<:lupa:1560430223160377380>")
           .setStyle(ButtonStyle.Secondary)
       )
     )
@@ -334,6 +339,175 @@ function buildNotificacao(req, { mencionar = false } = {}) {
     .addTextDisplayComponents(text("-# Central de Solicitações"));
 }
 
+// Consulta das solicitações do próprio servidor (botão "Ver solicitações")
+const POR_PAGINA = 5;
+
+const FILTROS = {
+  abertas: { label: "Em aberto", desc: "Pendente, em análise ou aprovada", status: ["pendente", "analise", "aprovada"] },
+  finalizadas: { label: "Finalizadas", desc: "Recusada ou concluída", status: ["recusada", "concluida"] },
+  todas: { label: "Todas", desc: "Todas as solicitações do servidor", status: Object.keys(STATUS) },
+};
+
+function buscarSolicitacoes(guildId, filtro, cat) {
+  return Object.values(readDb().requests)
+    .filter(
+      (r) =>
+        r.guildId === guildId &&
+        FILTROS[filtro].status.includes(r.status) &&
+        (cat === "todas" || r.categoria === cat)
+    )
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+function buildLista(guild, filtro, cat, page) {
+  const todas = buscarSolicitacoes(guild.id, filtro, cat);
+  const totalPaginas = Math.max(1, Math.ceil(todas.length / POR_PAGINA));
+  page = Math.min(Math.max(page, 0), totalPaginas - 1);
+  const itens = todas.slice(page * POR_PAGINA, (page + 1) * POR_PAGINA);
+  const estado = `${filtro}:${cat}`;
+
+  const container = new ContainerBuilder().addTextDisplayComponents(
+    text(
+      `-# CONSULTA\n## Solicitações do servidor\n-# ${FILTROS[filtro].label}${cat !== "todas" ? ` · ${CATEGORIAS[cat].label}` : ""} · ${todas.length} resultado(s) · Página ${page + 1} de ${totalPaginas}`
+    )
+  );
+
+  container.addSeparatorComponents(separator(true));
+  if (!itens.length) {
+    container.addTextDisplayComponents(
+      text("Nenhuma solicitação encontrada com esses filtros.")
+    );
+  }
+  itens.forEach((r, i) => {
+    const c = CATEGORIAS[r.categoria];
+    const p = PRIORIDADES[r.prioridade];
+    const s = STATUS[r.status];
+    if (i > 0) container.addSeparatorComponents(separator());
+    container.addTextDisplayComponents(
+      text(
+        `**${formatId(r.id)} · ${r.titulo}**\n${c.emoji} ${c.label}  ·  ${p.emoji} ${p.label}  ·  ${s.emoji} **${s.label}**\n-# Enviada por <@${r.userId}> <t:${Math.floor(r.createdAt / 1000)}:R>` +
+          (r.updatedAt ? ` · atualizada <t:${Math.floor(r.updatedAt / 1000)}:R>` : "")
+      )
+    );
+  });
+  container.addSeparatorComponents(separator(true));
+
+  if (itens.length) {
+    container.addActionRowComponents(
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(`melhoria_lista_ver:${estado}:${page}`)
+          .setPlaceholder("Ver detalhes de uma solicitação")
+          .addOptions(
+            itens.map((r) => ({
+              label: `${formatId(r.id)} · ${r.titulo}`.slice(0, 100),
+              value: String(r.id),
+              emoji: STATUS[r.status].emoji,
+              description: `${CATEGORIAS[r.categoria].label} · ${STATUS[r.status].label}`,
+            }))
+          )
+      )
+    );
+  }
+
+  container
+    .addActionRowComponents(
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(`melhoria_lista_filtro:${cat}`)
+          .setPlaceholder("Filtrar por status")
+          .addOptions(
+            Object.entries(FILTROS).map(([value, f]) => ({
+              label: f.label,
+              value,
+              description: f.desc,
+              default: value === filtro,
+            }))
+          )
+      )
+    )
+    .addActionRowComponents(
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(`melhoria_lista_cat:${filtro}`)
+          .setPlaceholder("Filtrar por categoria")
+          .addOptions(
+            { label: "Todas as categorias", value: "todas", default: cat === "todas" },
+            ...Object.entries(CATEGORIAS).map(([value, c]) => ({
+              label: c.label,
+              value,
+              emoji: c.emoji,
+              default: value === cat,
+            }))
+          )
+      )
+    )
+    .addActionRowComponents(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`melhoria_lista:${estado}:${page - 1}`)
+          .setLabel("Anterior")
+          .setEmoji("◀️")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(page === 0),
+        new ButtonBuilder()
+          .setCustomId(`melhoria_lista:${estado}:${page + 1}`)
+          .setLabel("Próxima")
+          .setEmoji("▶️")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(page + 1 >= totalPaginas)
+      )
+    );
+  return container;
+}
+
+function buildDetalhe(req, voltar) {
+  const c = CATEGORIAS[req.categoria];
+  const p = PRIORIDADES[req.prioridade];
+  const s = STATUS[req.status];
+  const totalAnexos = (req.anexos?.length || 0) + (req.anexosLinks?.length || 0);
+
+  const container = new ContainerBuilder()
+    .addTextDisplayComponents(
+      text(
+        `-# SOLICITAÇÃO ${formatId(req.id)}\n## ${req.titulo}\n${c.emoji} ${c.label}  ·  ${p.emoji} Prioridade ${p.label}`
+      )
+    )
+    .addSeparatorComponents(separator())
+    .addTextDisplayComponents(
+      text(
+        `### Descrição\n${req.descricao}` +
+          (req.detalhes ? `\n### Informações adicionais\n${req.detalhes}` : "") +
+          (totalAnexos ? `\n-# ${totalAnexos} anexo(s) enviado(s) à equipe` : "")
+      )
+    )
+    .addSeparatorComponents(separator());
+
+  container.addTextDisplayComponents(
+    text(
+      `**Status:** ${s.emoji} ${s.label}\n**Enviada por:** <@${req.userId}> <t:${Math.floor(req.createdAt / 1000)}:R>` +
+        (req.updatedAt ? `\n**Atualizada:** <t:${Math.floor(req.updatedAt / 1000)}:R>` : "")
+    )
+  );
+  if (req.resposta) {
+    container
+      .addSeparatorComponents(separator())
+      .addTextDisplayComponents(text(`### Mensagem da equipe\n${req.resposta}`));
+  }
+
+  return container
+    .addSeparatorComponents(separator(true))
+    .addActionRowComponents(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`melhoria_lista:${voltar}`)
+          .setLabel("Voltar à lista")
+          .setEmoji("<:refazer:1560428247383015444>")
+          .setStyle(ButtonStyle.Secondary)
+      )
+    );
+}
+
 // Painel de configuração por servidor (apenas ADMIN_ID)
 function buildConfig(guild) {
   const cfg = getGuildConfig(readDb(), guild.id);
@@ -407,6 +581,9 @@ module.exports = {
   buildEtapaPrioridade,
   buildEtapaFormulario,
   buildConfirmacao,
+  FILTROS,
+  buildLista,
+  buildDetalhe,
   buildHub,
   buildNotificacao,
 };
