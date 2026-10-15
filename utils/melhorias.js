@@ -35,7 +35,7 @@ const PRIORIDADES = {
 };
 
 const STATUS = {
-  pendente: { label: "Pendente", emoji: "<a:load:1560429798096904273>" },
+  pendente: { label: "Pendente", emoji: "<a:loading:1560437917552480367>" },
   analise: { label: "Em análise", emoji: "<:lupa:1560430223160377380>" },
   aprovada: { label: "Aprovada", emoji: "<:aprovado:1560428240013758647>" },
   recusada: { label: "Recusada", emoji: "<:recusado:1560428244937744484>" },
@@ -120,7 +120,7 @@ function buildPainel(guild) {
         new ButtonBuilder()
           .setCustomId("melhoria_abrir")
           .setLabel("Enviar solicitação")
-          .setEmoji("<:seta:1560424451567521923>")
+          .setEmoji("<a:setinha:1560437915568578610>")
           .setStyle(ButtonStyle.Secondary)
       )
     )
@@ -199,7 +199,7 @@ function buildEtapaFormulario(cat, prio) {
         new ButtonBuilder()
           .setCustomId(`melhoria_form:${cat}:${prio}`)
           .setLabel("Preencher formulário")
-          .setEmoji("<:escrever:1560429913285206066>")
+          .setEmoji("<a:preencher:1560437919422873730>")
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId("melhoria_reiniciar")
