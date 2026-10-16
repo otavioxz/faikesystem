@@ -29,7 +29,7 @@ const {
   FILTROS,
   buildLista,
   buildDetalhe,
-  buildHub,
+  buildHubMensagem,
   buildNotificacao,
 } = require("../../utils/melhorias");
 
@@ -131,8 +131,9 @@ module.exports = {
       req.updatedAt = Date.now();
       writeDb(db);
 
+      // Mantém o aviso no topo; edição não notifica de novo
       await interaction.update({
-        components: [buildHub(req)],
+        components: buildHubMensagem(req),
         allowedMentions: { parse: [] },
       });
 
@@ -358,12 +359,22 @@ module.exports = {
           createdAt: Date.now(),
         };
 
-        const msg = await hub.send({
-          flags: MessageFlags.IsComponentsV2,
-          components: [buildHub(req)],
-          files,
-          allowedMentions: { parse: [] },
-        });
+        let msg;
+        try {
+          msg = await hub.send({
+            flags: MessageFlags.IsComponentsV2,
+            components: buildHubMensagem(req),
+            files,
+            allowedMentions: { users: [process.env.OWNER] },
+          });
+        } catch (error) {
+          console.error(`[MELHORIAS] Falha ao enviar ${formatId(id)} no hub:`.red.bold, error);
+          return interaction.followUp({
+            content:
+              "Não consegui entregar sua solicitação à equipe agora. Tente novamente em alguns minutos ou avise o dono do bot.",
+            flags: [MessageFlags.Ephemeral],
+          });
+        }
         req.hubMessageId = msg.id;
         db = readDb();
         db.requests[id] = req;

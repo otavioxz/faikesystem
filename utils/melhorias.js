@@ -227,6 +227,15 @@ function buildConfirmacao(req) {
 }
 
 // Mensagem no servidor hub
+// Mensagem completa do hub: menção ao dono (OWNER do .env) + card da solicitação
+function buildHubMensagem(req) {
+  const c = CATEGORIAS[req.categoria];
+  const aviso = text(
+    `<@${process.env.OWNER}> nova solicitação de ${c.emoji} **${c.label}** · ${formatId(req.id)}`
+  );
+  return [aviso, buildHub(req)];
+}
+
 function buildHub(req) {
   const s = STATUS[req.status];
   const c = CATEGORIAS[req.categoria];
@@ -585,5 +594,6 @@ module.exports = {
   buildLista,
   buildDetalhe,
   buildHub,
+  buildHubMensagem,
   buildNotificacao,
 };

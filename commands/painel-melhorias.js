@@ -3,6 +3,7 @@ const {
   MessageFlags,
   InteractionContextType,
   ChannelType,
+  PermissionFlagsBits,
 } = require("discord.js");
 const { ADMIN_ID, buildPainel } = require("../utils/melhorias");
 
@@ -25,7 +26,25 @@ module.exports = {
       });
     }
 
-    const channel = interaction.options.getChannel("canal") || interaction.channel;
+    const channelId = interaction.options.getChannel("canal")?.id ?? interaction.channelId;
+    const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+
+    // Confere as permissões do bot antes de enviar (evita o erro 50001 Missing Access)
+    const necessarias = {
+      ViewChannel: "Ver canal",
+      SendMessages: "Enviar mensagens",
+    };
+    const perms = channel?.permissionsFor(interaction.guild.members.me);
+    const faltando = Object.entries(necessarias)
+      .filter(([flag]) => !perms?.has(PermissionFlagsBits[flag]))
+      .map(([, nome]) => `\`${nome}\``);
+
+    if (!channel || faltando.length) {
+      return interaction.reply({
+        content: `Não consigo enviar o painel em <#${channelId}>. Permissões que faltam para o bot nesse canal: ${faltando.join(", ") || "`Ver canal`"}.`,
+        flags: [MessageFlags.Ephemeral],
+      });
+    }
 
     await channel.send({
       flags: MessageFlags.IsComponentsV2,
