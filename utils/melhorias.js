@@ -118,14 +118,19 @@ function buildPainel(guild) {
     .addActionRowComponents(
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId("melhoria_abrir")
-          .setLabel("Enviar solicitação")
-          .setEmoji("<a:setinha:1560437915568578610>")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
           .setCustomId("melhoria_lista:abertas:todas:0")
           .setLabel("Ver solicitações")
           .setEmoji("<:lupa:1560430223160377380>")
+          .setStyle(ButtonStyle.Secondary)
+      )
+    )
+    .addSeparatorComponents(separator())
+    .addActionRowComponents(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("melhoria_abrir")
+          .setLabel("Enviar solicitação")
+          .setEmoji("<a:setinha:1560437915568578610>")
           .setStyle(ButtonStyle.Secondary)
       )
     )
